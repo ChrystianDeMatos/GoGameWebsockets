@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gorilla/websocket"
@@ -92,5 +93,7 @@ func main() {
 		http.ServeFile(w, r, "websockets.html")
 	})
 
-	http.ListenAndServe("", nil)
+	port := os.Getenv("PORT")
+
+	http.ListenAndServe(":"+port, nil)
 }
