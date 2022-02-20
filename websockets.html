@@ -33,6 +33,7 @@
     };
 
     socket.onmessage = function (e) {
+      console.log(e)
       output.innerHTML += "\nServer: " + e.data + "\n";
     };
 

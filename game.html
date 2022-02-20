@@ -1,0 +1,256 @@
+<html>
+  <head>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  </head>
+  <style>
+    html {
+      text-align: center;
+      font-size: 16px;
+    }
+    div {
+      padding: 1rem;
+    }
+    #input {
+      font-size: 16px;
+    }
+    p {
+        font-size: 16px;
+    }
+
+    .game {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .game-board {
+        display: grid;
+        grid-column-gap: 10px;
+        grid-row-gap: 10px;
+    }
+
+    .square{
+        border: 1px solid black;
+        background-color: white;
+        font-size: 50px;
+        font-weight: bold;
+        text-align: center;
+        line-height: 100px;
+        cursor: pointer;
+    }
+
+    .square:hover {
+        background-color: #e6e6e6;
+    }
+
+    .local-player {
+        background-color: #ff0000;
+    }
+
+    .online-player {	
+        background-color: #0000ff !important;
+    }
+
+
+  </style>
+  <div>
+    <h1>Go websockets game example</h1>
+
+
+    <div class="game" x-data="game">
+        <input type="color" x-model="playerColor" x-on:input.debounce.750="onChangeColor">
+        <div 
+            x-bind:="boardProps"
+            @keydown.up.prevent.window="move('up')"
+            @keydown.down.prevent.window="move('down')"
+            @keydown.left.prevent.window="move('left')"
+            @keydown.right.prevent.window="move('right')"
+        >
+            <template x-for="row in gameBoard">
+                <div x-bind:="squareProps"></div>
+            </template>
+        </div>
+    </div>
+    
+  </div>
+  
+  <script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('game', () => ({
+            socket: null,
+
+            gameBoard: [],
+
+            playerColor: '#ffffff',
+            playerPosition: [3,3],
+            playerId: getRandomGuid(),
+
+            onlinePlayers: [],
+
+            boardSize: 5,
+            squareSize: 100,
+
+            async init() {
+                this.gameBoard = getBoardPositions(this.boardSize, this.boardSize)
+                this.playerColor = await getRandomHexColorFromApi()
+                this.connectToWebSocket()
+            },
+
+            connectToWebSocket() {
+                socket = new WebSocket('ws://go-websocket-teste.herokuapp.com/play')
+                socket.onopen = () => {
+                    console.log('connected')
+                    this.sendMessageToWebsocket('join', {
+                        color: this.playerColor,
+                        position: this.playerPosition
+                    })
+                }
+                socket.onmessage = (event) => {
+                    const { data, type } = JSON.parse(event.data)
+                    switch(type) {
+                        case 'join':
+                            this.onlinePlayers = data.filter(player => player.id !== this.playerId)
+                            break
+                        case 'newPlayer':
+                            if(data.id != this.playerId) {
+                                this.onlinePlayers.push({
+                                    id: data.id,
+                                    position: data.position,
+                                    color: data.color
+                                })
+                            }
+                            break
+                        case 'move':
+                            this.onlinePlayers.forEach(player => {
+                                if(player.id === data.id) {
+                                    player.position = data.position
+                                }
+                            })
+                            break
+
+                        case 'colorChange':
+                            this.onlinePlayers.forEach(player => {
+                                if(player.id === data.id) {
+                                    player.color = data.color
+                                }
+                            })
+                            break
+
+                        case 'leave':
+                            this.onlinePlayers = this.onlinePlayers.filter(player => player.id !== data.id)
+                            break
+
+                    }
+                }
+                window.onbeforeunload = function(){
+                    socket.close()
+                }
+            },
+
+            squareProps: {
+                [`:class`]: "'square'",
+                'x-text': 'row',
+                'x-key': 'row',
+                [`:style`]: '{ backgroundColor: squareColor(row), height: `${squareSize}px`, width: `${squareSize}px` }',
+            },
+
+            boardProps: {
+                [`:class`]: "'game-board'",
+                [`:style`]: '{ gridTemplateColumns: `repeat(${boardSize}, 1fr)` }'
+            },
+
+            move(direction) {
+                switch(direction)
+                {
+                    case 'up':
+                        this.playerPosition[0]--;
+                        break;
+                    case 'down':
+                        this.playerPosition[0]++;
+                        break;
+                    case 'left':
+                        this.playerPosition[1]--;
+                        break;
+                    case 'right':
+                        this.playerPosition[1]++;
+                        break;
+                }
+
+                this.playerPosition = this.playerPosition.map(position => {
+                    if(position < 0) return 0;
+                    if(position > this.boardSize - 1) return this.boardSize - 1;
+                    return position;
+                })
+
+                this.onPlayerMove()
+            },
+
+            
+
+            squareColor(currentPosition) {
+                let color = 'white';
+                if(comparePositions(currentPosition, this.playerPosition)) {
+                    color = this.playerColor;
+                }
+
+                this.onlinePlayers.forEach(player => {
+                    if(comparePositions(currentPosition, player.position)) {
+                        color = player.color;
+                    }
+                })
+
+                return color
+            },
+
+
+            onPlayerMove() {
+                this.sendMessageToWebsocket('move', {
+                    position: this.playerPosition
+                })
+            },
+
+            onChangeColor() {
+                this.sendMessageToWebsocket('colorChange', {
+                    color: this.playerColor
+                })
+            },
+
+            sendMessageToWebsocket(type, content) {
+                socket.send(JSON.stringify({
+                    idPlayer: this.playerId,
+                    type,
+                    ...content
+                }))
+            }
+        }))
+    })
+
+    function comparePositions(pos1, pos2) {
+        return pos1[0] == pos2[0] && pos1[1] == pos2[1]
+    }
+
+    function getRandomGuid() {
+        return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    }
+
+    function getBoardPositions(width, lenght){
+        let positions = [];
+        for(let i = 0; i < width; i++){
+            for(let j = 0; j < lenght; j++){
+                positions.push([i,j]);
+            }
+        }
+        return positions;
+    }
+
+    async function getRandomHexColorFromApi() {
+        const color = await fetch('https://www.random.org/integers/?num=1&min=0&max=16777215&col=1&base=16&format=plain&rnd=new')
+            .then(response => response.text())
+            .then(text => text.trim())
+            .then(hex => `#${hex}`)
+
+        return color
+    }
+  </script>
+</html>

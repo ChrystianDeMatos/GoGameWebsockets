@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"websocket/handlers"
 
 	"github.com/gorilla/websocket"
 )
@@ -37,6 +38,8 @@ func updateTodoList(input string) {
 	}
 }
 
+var playersConnections []*websocket.Conn
+
 func notifyAllConnections(connections []*websocket.Conn) {
 	for _, conn := range connections {
 		conn.WriteMessage(websocket.TextMessage, []byte("New Todo Added"))
@@ -45,55 +48,39 @@ func notifyAllConnections(connections []*websocket.Conn) {
 
 func main() {
 
-	connections := []*websocket.Conn{}
-
-	http.HandleFunc("/todo", func(w http.ResponseWriter, r *http.Request) {
-		// Upgrade upgrades the HTTP server connection to the WebSocket protocol.
+	http.HandleFunc("/play", func(w http.ResponseWriter, r *http.Request) {
 		connection, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			log.Print("upgrade failed: ", err)
 			return
 		}
-		connections = append(connections, connection)
-		defer connection.Close()
+		defer func() {
+			handlers.HandleDisconnect(connection)
+			connection.Close()
+			log.Println("Connection closed")
+		}()
 
 		// Continuosly read and write message
 		for {
-			messageType, message, err := connection.ReadMessage()
+			err := handlers.HandleMessages(connection)
 			if err != nil {
 				log.Println("read failed:", err)
 				break
 			}
-			userInput := string(message)
-			command := getCmd(userInput)
-			messageOfTodo := getMessage(userInput)
-			if command == "add" {
-				todoList = append(todoList, messageOfTodo)
-			} else if command == "done" {
-				updateTodoList(messageOfTodo)
-			}
-			output := "Current Todos: \n"
-			for _, todo := range todoList {
-				output += "\n - " + todo + "\n"
-			}
-
-			output += "\n----------------------------------------"
-
-			message = []byte(output)
-			err = connection.WriteMessage(messageType, message)
-			notifyAllConnections(connections)
-			if err != nil {
-				log.Println("write failed:", err)
-				break
-			}
 		}
+
 	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "websockets.html")
+		http.ServeFile(w, r, "game.html")
 	})
 
 	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	log.Println("is the port", port)
 
 	http.ListenAndServe(":"+port, nil)
 }
