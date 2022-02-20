@@ -4,47 +4,12 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"websocket/handlers"
 
 	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{}
-var todoList []string
-
-func getCmd(input string) string {
-	inputArr := strings.Split(input, " ")
-	return inputArr[0]
-}
-
-func getMessage(input string) string {
-	inputArr := strings.Split(input, " ")
-	var result string
-	for i := 1; i < len(inputArr); i++ {
-		result += inputArr[i]
-	}
-	return result
-}
-
-func updateTodoList(input string) {
-	tmpList := todoList
-	todoList = []string{}
-	for _, val := range tmpList {
-		if val == input {
-			continue
-		}
-		todoList = append(todoList, val)
-	}
-}
-
-var playersConnections []*websocket.Conn
-
-func notifyAllConnections(connections []*websocket.Conn) {
-	for _, conn := range connections {
-		conn.WriteMessage(websocket.TextMessage, []byte("New Todo Added"))
-	}
-}
 
 func main() {
 

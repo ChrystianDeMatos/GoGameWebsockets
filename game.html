@@ -98,7 +98,7 @@
             },
 
             connectToWebSocket() {
-                socket = new WebSocket('ws://go-websocket-teste.herokuapp.com/play')
+                socket = new WebSocket('wss://go-websocket-teste.herokuapp.com/play')
                 socket.onopen = () => {
                     console.log('connected')
                     this.sendMessageToWebsocket('join', {
